@@ -9,13 +9,11 @@ const BASE_URL = "https://api.dexpay.africa/api/v1";
 function getHeaders() {
   const apiKey = process.env.DEXPAY_API_KEY;
   const apiSecret = process.env.DEXPAY_API_SECRET;
-
   if (!apiKey || !apiSecret) {
     throw new Error(
       "Missing DexPay environment variables: DEXPAY_API_KEY and/or DEXPAY_API_SECRET",
     );
   }
-
   return {
     "Content-Type": "application/json",
     "x-api-key": apiKey,
@@ -50,26 +48,22 @@ export async function createCheckoutSession(params: {
     throw new Error(error?.message ?? "Failed to create checkout session");
   }
 
-  return res.json();
+  const json = await res.json();
+  console.log("[DexPay] checkout session raw:", JSON.stringify(json));
+  return (json?.data ?? json) as DexPaySession;
 }
 
-// Get available payment providers
-export async function getProviders(
-  countryISO?: string,
-): Promise<DexPayProvider[]> {
-  const params = new URLSearchParams();
-  if (countryISO) params.set("filters[provider_country]", countryISO);
-  params.set("filters[provider_status]", "active");
-
-  const res = await fetch(`${BASE_URL}/payment-providers?${params}`, {
+// Get ALL providers — le filtre DexPay ne fonctionne pas, on filtre manuellement dans la route
+export async function getProviders(): Promise<DexPayProvider[]> {
+  const res = await fetch(`${BASE_URL}/payment-providers`, {
     headers: getHeaders(),
     next: { revalidate: 300 }, // cache 5 min
   });
 
   if (!res.ok) throw new Error("Failed to fetch providers");
 
-  const data = await res.json();
-  return data.data as DexPayProvider[];
+  const json = await res.json();
+  return (json?.data ?? []) as DexPayProvider[];
 }
 
 // Create a transaction attempt (direct integration)
@@ -105,11 +99,9 @@ export async function verifyWebhookSignature(
   signature: string,
 ): Promise<boolean> {
   const secret = process.env.DEXPAY_API_SECRET;
-
   if (!secret) {
     throw new Error("Missing DexPay environment variable: DEXPAY_API_SECRET");
   }
-
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
