@@ -3,7 +3,8 @@
 import { Check, ChevronRight, Smartphone } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import QRCode from "qrcode";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,9 @@ export function CheckoutForm() {
 
   // Checkout session
   const [reference, setReference] = useState("");
+  const [cashoutUrl, setCashoutUrl] = useState<string | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [qrError, setQrError] = useState(false);
   //const [sessionId, setSessionId] = useState("");
 
   // Providers
@@ -59,6 +63,52 @@ export function CheckoutForm() {
       .catch(() => toast.error("Impossible de charger les opérateurs"))
       .finally(() => setLoadingProviders(false));
   }, [step, countryISO]);
+
+  // Generate QR code when cashoutUrl is available
+  useEffect(() => {
+    if (!cashoutUrl || !qrCanvasRef.current) return;
+    QRCode.toCanvas(qrCanvasRef.current, cashoutUrl, {
+      width: 200,
+      margin: 2,
+      color: { dark: "#000000", light: "#ffffff" },
+    }).catch(() => setQrError(true));
+  }, [cashoutUrl]);
+
+  // Poll payment status
+  useEffect(() => {
+    if (step !== "payment" || !reference) return;
+
+    const INTERVAL = 4000; // vérifier toutes les 4s
+    const TIMEOUT = 10 * 60 * 1000; // arrêter après 10 min
+    const startedAt = Date.now();
+
+    const poll = async () => {
+      if (Date.now() - startedAt > TIMEOUT) {
+        clearInterval(timer);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/orders/status?reference=${reference}`);
+        const data = await res.json();
+
+        if (data.status === "paid") {
+          clearInterval(timer);
+          router.push(`/checkout/success?ref=${reference}`);
+        } else if (data.status === "failed" || data.status === "cancelled") {
+          clearInterval(timer);
+          router.push(`/checkout/failure?ref=${reference}`);
+        }
+      } catch {
+        // silencieux — on réessaie au prochain tick
+      }
+    };
+
+    const timer = setInterval(poll, INTERVAL);
+    poll(); // premier appel immédiat
+
+    return () => clearInterval(timer);
+  }, [step, reference, router]);
 
   // Redirect if cart empty after mount
   useEffect(() => {
@@ -125,11 +175,17 @@ export function CheckoutForm() {
       if (!res.ok) throw new Error(data.error ?? "Erreur");
 
       if (data.cashout_url || data.sandbox_payment_url) {
-        // Wave / QR redirect
         const url = data.cashout_url ?? data.sandbox_payment_url;
-        window.location.href = url;
+        const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+
+        if (isMobile) {
+          window.location.href = url;
+        } else {
+          setCashoutUrl(url);
+          setStep("payment");
+          clearCart();
+        }
       } else {
-        // USSD — show waiting screen
         setStep("payment");
         clearCart();
       }
@@ -326,36 +382,68 @@ export function CheckoutForm() {
         </div>
       )}
 
-      {/* ─── Step 3: USSD waiting / confirmation ─── */}
+      {/* ─── Step 3: QR Code / USSD waiting ─── */}
       {step === "payment" && (
         <div className="flex flex-col items-center gap-4 py-6 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Smartphone className="h-6 w-6 text-primary" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">
-              Confirmez sur votre téléphone
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground max-w-xs">
-              Un appel USSD a été initié. Ouvrez votre application{" "}
-              {selectedProvider?.provider_name ?? "Mobile Money"} et validez le
-              paiement de{" "}
-              <span className="font-semibold text-foreground">
-                {formatPrice(total, "XOF")}
-              </span>
-              .
-            </p>
-          </div>
+
+          {cashoutUrl ? (
+            <>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Scannez pour payer
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-xs">
+                  Ouvrez{" "}
+                  <span className="font-medium text-foreground">
+                    {selectedProvider?.provider_name}
+                  </span>{" "}
+                  sur votre téléphone et scannez ce QR code.
+                </p>
+              </div>
+              <div className="rounded-lg border border-border p-3 bg-white">
+                {qrError ? (
+                  <a
+                    href={cashoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary underline"
+                  >
+                    Ouvrir le lien de paiement
+                  </a>
+                ) : (
+                  <canvas ref={qrCanvasRef} />
+                )}
+              </div>
+            </>
+          ) : (
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Confirmez sur votre téléphone
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-xs">
+                Un appel USSD a été initié. Ouvrez votre application{" "}
+                {selectedProvider?.provider_name ?? "Mobile Money"} et validez
+                le paiement de{" "}
+                <span className="font-semibold text-foreground">
+                  {formatPrice(total, "XOF")}
+                </span>
+                .
+              </p>
+            </div>
+          )}
+
           <p className="text-[11px] text-muted-foreground">
             Référence : <span className="font-mono">{reference}</span>
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/checkout/success?ref=${reference}`)}
-          >
-            J'ai confirmé le paiement
-          </Button>
+
+          {/* Polling indicator — remplace le bouton */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Spinner className="h-3 w-3" />
+            En attente de confirmation...
+          </div>
         </div>
       )}
     </div>
