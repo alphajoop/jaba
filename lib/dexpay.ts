@@ -1,0 +1,130 @@
+import type {
+  DexPayAttemptResponse,
+  DexPayProvider,
+  DexPaySession,
+} from "@/types";
+
+const BASE_URL = "https://api.dexpay.africa/api/v1";
+
+function getHeaders() {
+  const apiKey = process.env.DEXPAY_API_KEY;
+  const apiSecret = process.env.DEXPAY_API_SECRET;
+
+  if (!apiKey || !apiSecret) {
+    throw new Error(
+      "Missing DexPay environment variables: DEXPAY_API_KEY and/or DEXPAY_API_SECRET",
+    );
+  }
+
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "x-api-secret": apiSecret,
+  };
+}
+
+// Create a checkout session
+export async function createCheckoutSession(params: {
+  reference: string;
+  item_name: string;
+  amount: number;
+  currency: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+}): Promise<DexPaySession> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const res = await fetch(`${BASE_URL}/checkout-sessions`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      ...params,
+      success_url: `${appUrl}/checkout/success?ref=${params.reference}`,
+      failure_url: `${appUrl}/checkout/failure?ref=${params.reference}`,
+      webhook_url: `${appUrl}/api/webhook/dexpay`,
+    }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.message ?? "Failed to create checkout session");
+  }
+
+  return res.json();
+}
+
+// Get available payment providers
+export async function getProviders(
+  countryISO?: string,
+): Promise<DexPayProvider[]> {
+  const params = new URLSearchParams();
+  if (countryISO) params.set("filters[provider_country]", countryISO);
+  params.set("filters[provider_status]", "active");
+
+  const res = await fetch(`${BASE_URL}/payment-providers?${params}`, {
+    headers: getHeaders(),
+    next: { revalidate: 300 }, // cache 5 min
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch providers");
+
+  const data = await res.json();
+  return data.data as DexPayProvider[];
+}
+
+// Create a transaction attempt (direct integration)
+export async function createTransactionAttempt(
+  reference: string,
+  params: {
+    payment_method: "mobile_money" | "card";
+    operator: string;
+    customer: { name: string; phone: string; email: string };
+    countryISO: string;
+  },
+): Promise<DexPayAttemptResponse> {
+  const res = await fetch(
+    `${BASE_URL}/checkout-sessions/${reference}/transaction-attempt`,
+    {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(params),
+    },
+  );
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.message ?? "Failed to initiate payment");
+  }
+
+  return res.json();
+}
+
+// Verify webhook HMAC-SHA256 signature
+export async function verifyWebhookSignature(
+  payload: unknown,
+  signature: string,
+): Promise<boolean> {
+  const secret = process.env.DEXPAY_API_SECRET;
+
+  if (!secret) {
+    throw new Error("Missing DexPay environment variable: DEXPAY_API_SECRET");
+  }
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signed = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(JSON.stringify(payload)),
+  );
+  const hex = Array.from(new Uint8Array(signed))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hex === signature;
+}
