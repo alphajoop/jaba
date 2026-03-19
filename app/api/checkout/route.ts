@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const reference = generateReference();
   const supabase = createServerClient();
 
-  // 1. Créer la commande en DB
+  // 1. Créer la commande en DB (status: pending)
   const { data: order, error: orderErr } = await supabase
     .from("orders")
     .insert({
@@ -89,6 +89,8 @@ export async function POST(request: Request) {
   }
 
   // 3. Créer la session DexPay
+  // Note: DexPay utilise notre `reference` comme identifiant de session —
+  // pas besoin de stocker un ID séparé en DB.
   try {
     const session = await createCheckoutSession({
       reference,
@@ -100,20 +102,15 @@ export async function POST(request: Request) {
       customer_phone: customer.phone,
     });
 
-    // DexPay n'a pas de champ `id` — on utilise `reference` comme identifiant de session
-    // On stocke aussi le payment_url pour une éventuelle redirection hosted
+    // Passer le statut à "processing" — reference est déjà l'identifiant DexPay
     await supabase
       .from("orders")
-      .update({
-        dexpay_session_id: session.reference ?? reference,
-        status: "processing",
-      })
+      .update({ status: "processing" })
       .eq("id", order.id);
 
     return NextResponse.json({
       order_id: order.id,
       reference,
-      session_reference: session.reference ?? reference,
       payment_url: session.payment_url,
       total,
       currency,

@@ -24,7 +24,6 @@ export type Order = {
   currency: string;
   status: "pending" | "processing" | "paid" | "failed" | "cancelled";
   payment_provider: string | null;
-  dexpay_session_id: string | null;
   created_at: string;
   updated_at: string;
 };
