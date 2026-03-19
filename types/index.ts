@@ -1,42 +1,8 @@
-// Database types (mirrors Supabase schema)
-export type Product = {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number; // in XOF
-  currency: string;
-  stock: number;
-  image_url: string | null;
-  category: string | null;
-  slug: string;
-  is_active: boolean;
-  created_at: string;
-};
+import type { Tables } from "@/lib/supabase/database.types";
 
-export type Order = {
-  id: string;
-  reference: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  country_iso: string;
-  total_amount: number;
-  currency: string;
-  status: "pending" | "processing" | "paid" | "failed" | "cancelled";
-  payment_provider: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type OrderItem = {
-  id: string;
-  order_id: string;
-  product_id: string;
-  product_name: string;
-  quantity: number;
-  unit_price: number;
-  subtotal: number;
-};
+export type Product = Tables<"products">;
+export type Order = Tables<"orders">;
+export type OrderItem = Tables<"order_items">;
 
 // Cart (client-side only)
 export type CartItem = {

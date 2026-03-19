@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
 // Server-side client with service role (for API routes)
 export function createServerClient() {
@@ -11,7 +12,7 @@ export function createServerClient() {
     );
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
 }
