@@ -1,8 +1,23 @@
 import { CheckoutForm } from "@/components/checkout-form";
 import { Header } from "@/components/header";
 import { Separator } from "@/components/ui/separator";
+import { getProviders } from "@/lib/dexpay";
 
-export default function CheckoutPage() {
+async function getAvailableProviders() {
+  try {
+    const providers = await getProviders();
+    return providers.filter((p) => p.provider_status === "active");
+  } catch {
+    return [];
+  }
+}
+
+export default async function CheckoutPage() {
+  const providers = await getAvailableProviders();
+  const uniqueProviders = Array.from(
+    new Set(providers.map((p) => p.provider_name.trim())),
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -25,8 +40,8 @@ export default function CheckoutPage() {
         {/* Trust badge */}
         <p className="mt-4 text-center text-[11px] text-muted-foreground">
           Paiements sécurisés par{" "}
-          <span className="font-medium text-foreground">DexPay</span> · Wave ·
-          Orange Money · MTN
+          <span className="font-medium text-foreground">DexPay</span> ·{" "}
+          {uniqueProviders.join(" · ")}
         </p>
       </main>
     </div>

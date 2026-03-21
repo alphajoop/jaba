@@ -9,6 +9,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { useCart } from "@/hooks/useCart";
@@ -22,6 +31,17 @@ const COUNTRY_OPTIONS = [
   { label: "Côte d'Ivoire (+225)", value: "CI" },
   { label: "Cameroun (+237)", value: "CM" },
   { label: "Guinée (+224)", value: "GN" },
+];
+
+const REGIONAL_GROUPS = [
+  {
+    label: "Afrique de l'Ouest",
+    items: COUNTRY_OPTIONS.filter((c) => ["SN", "CI", "GN"].includes(c.value)),
+  },
+  {
+    label: "Afrique Centrale",
+    items: COUNTRY_OPTIONS.filter((c) => ["CM"].includes(c.value)),
+  },
 ];
 
 export function CheckoutForm() {
@@ -246,6 +266,26 @@ export function CheckoutForm() {
             />
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="country">Pays</Label>
+            <Select value={countryISO} onValueChange={setCountryISO}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Sélectionnez un pays" />
+              </SelectTrigger>
+              <SelectContent>
+                {REGIONAL_GROUPS.map((group) => (
+                  <SelectGroup key={group.label}>
+                    <SelectLabel>{group.label}</SelectLabel>
+                    {group.items.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="phone">Téléphone Mobile Money</Label>
             <Input
               id="phone"
@@ -255,21 +295,6 @@ export function CheckoutForm() {
               onChange={(e) => setPhone(e.target.value)}
               required
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="country">Pays</Label>
-            <select
-              id="country"
-              value={countryISO}
-              onChange={(e) => setCountryISO(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring"
-            >
-              {COUNTRY_OPTIONS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>

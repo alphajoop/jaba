@@ -15,7 +15,7 @@ export function Header() {
           href="/shop"
           className="text-sm font-semibold tracking-tight text-foreground hover:opacity-70 transition-opacity"
         >
-          mini shop
+          Jaba shop
         </Link>
 
         <nav className="flex items-center gap-4">
