@@ -48,43 +48,31 @@ export function CheckoutForm() {
   const router = useRouter();
   const { items, total, clearCart, mounted } = useCart();
 
-  // Step
   const [step, setStep] = useState<Step>("info");
   const [loading, setLoading] = useState(false);
-
-  // Customer info
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [countryISO, setCountryISO] = useState("SN");
-
-  // Checkout session
   const [reference, setReference] = useState("");
   const [cashoutUrl, setCashoutUrl] = useState<string | null>(null);
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const [qrError, setQrError] = useState(false);
-  //const [sessionId, setSessionId] = useState("");
-
-  // Providers
   const [providers, setProviders] = useState<DexPayProvider[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [selectedProvider, setSelectedProvider] =
     useState<DexPayProvider | null>(null);
 
-  // Fetch providers when entering provider step
   useEffect(() => {
     if (step !== "provider") return;
     setLoadingProviders(true);
     fetch(`/api/providers?country=${countryISO}`)
       .then((r) => r.json())
-      .then((json) => {
-        setProviders(json.data ?? []);
-      })
+      .then((json) => setProviders(json.data ?? []))
       .catch(() => toast.error("Impossible de charger les opérateurs"))
       .finally(() => setLoadingProviders(false));
   }, [step, countryISO]);
 
-  // Generate QR code when cashoutUrl is available
   useEffect(() => {
     if (!cashoutUrl || !qrCanvasRef.current) return;
     QRCode.toCanvas(qrCanvasRef.current, cashoutUrl, {
@@ -94,24 +82,19 @@ export function CheckoutForm() {
     }).catch(() => setQrError(true));
   }, [cashoutUrl]);
 
-  // Poll payment status
   useEffect(() => {
     if (step !== "payment" || !reference) return;
-
-    const INTERVAL = 4000; // vérifier toutes les 4s
-    const TIMEOUT = 10 * 60 * 1000; // arrêter après 10 min
+    const INTERVAL = 4000;
+    const TIMEOUT = 10 * 60 * 1000;
     const startedAt = Date.now();
-
     const poll = async () => {
       if (Date.now() - startedAt > TIMEOUT) {
         clearInterval(timer);
         return;
       }
-
       try {
         const res = await fetch(`/api/orders/status?reference=${reference}`);
         const data = await res.json();
-
         if (data.status === "paid") {
           clearInterval(timer);
           router.push(`/checkout/success?ref=${reference}`);
@@ -119,22 +102,16 @@ export function CheckoutForm() {
           clearInterval(timer);
           router.push(`/checkout/failure?ref=${reference}`);
         }
-      } catch {
-        // silencieux — on réessaie au prochain tick
-      }
+      } catch {}
     };
-
     const timer = setInterval(poll, INTERVAL);
-    poll(); // premier appel immédiat
-
+    poll();
     return () => clearInterval(timer);
   }, [step, reference, router]);
 
-  // Redirect if cart empty after mount
   useEffect(() => {
-    if (mounted && items.length === 0 && step === "info") {
+    if (mounted && items.length === 0 && step === "info")
       router.replace("/cart");
-    }
   }, [mounted, items, step, router]);
 
   async function handleInfoSubmit(e: React.FormEvent) {
@@ -144,7 +121,6 @@ export function CheckoutForm() {
       return;
     }
     setLoading(true);
-
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -161,10 +137,8 @@ export function CheckoutForm() {
           })),
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur serveur");
-
       setReference(data.reference);
       setStep("provider");
     } catch (err) {
@@ -177,7 +151,6 @@ export function CheckoutForm() {
   async function handleAttempt() {
     if (!selectedProvider) return;
     setLoading(true);
-
     try {
       const res = await fetch("/api/checkout/attempt", {
         method: "POST",
@@ -190,14 +163,11 @@ export function CheckoutForm() {
           country_iso: countryISO,
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur");
-
       if (data.cashout_url || data.sandbox_payment_url) {
         const url = data.cashout_url ?? data.sandbox_payment_url;
         const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
-
         if (isMobile) {
           window.location.href = url;
         } else {
@@ -220,8 +190,8 @@ export function CheckoutForm() {
 
   return (
     <div className="space-y-6">
-      {/* Progress indicator */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      {/* Progress */}
+      <div className="flex items-center gap-2">
         <StepDot
           active={step === "info"}
           done={step !== "info"}
@@ -241,11 +211,16 @@ export function CheckoutForm() {
         />
       </div>
 
-      {/* ─── Step 1: Customer info ─── */}
+      {/* ─── Step 1 ─── */}
       {step === "info" && (
         <form onSubmit={handleInfoSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="name">Nom complet</Label>
+            <Label
+              htmlFor="name"
+              className="text-[11px] uppercase tracking-widest text-muted-foreground"
+            >
+              Nom complet
+            </Label>
             <Input
               id="name"
               placeholder="Alpha Diop"
@@ -255,7 +230,12 @@ export function CheckoutForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label
+              htmlFor="email"
+              className="text-[11px] uppercase tracking-widest text-muted-foreground"
+            >
+              Email
+            </Label>
             <Input
               id="email"
               type="email"
@@ -266,7 +246,12 @@ export function CheckoutForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="country">Pays</Label>
+            <Label
+              htmlFor="country"
+              className="text-[11px] uppercase tracking-widest text-muted-foreground"
+            >
+              Pays
+            </Label>
             <Select value={countryISO} onValueChange={setCountryISO}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Sélectionnez un pays" />
@@ -286,7 +271,12 @@ export function CheckoutForm() {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="phone">Téléphone Mobile Money</Label>
+            <Label
+              htmlFor="phone"
+              className="text-[11px] uppercase tracking-widest text-muted-foreground"
+            >
+              Téléphone Mobile Money
+            </Label>
             <Input
               id="phone"
               type="tel"
@@ -297,7 +287,11 @@ export function CheckoutForm() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full rounded-full noise-matcha"
+            disabled={loading}
+          >
             {loading ? (
               <>
                 <Spinner className="mr-2 h-4 w-4" />
@@ -305,24 +299,23 @@ export function CheckoutForm() {
               </>
             ) : (
               <>
-                Continuer
-                <ChevronRight className="h-4 w-4" />
+                Continuer <ChevronRight className="h-4 w-4" />
               </>
             )}
           </Button>
         </form>
       )}
 
-      {/* ─── Step 2: Provider selection ─── */}
+      {/* ─── Step 2 ─── */}
       {step === "provider" && (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Choisissez votre opérateur Mobile Money
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            Choisissez votre opérateur
           </p>
 
           {loadingProviders ? (
             <div className="flex items-center justify-center py-8">
-              <Spinner className="h-5 w-5" />
+              <Spinner className="h-5 w-5 text-primary" />
             </div>
           ) : providers.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">
@@ -338,8 +331,8 @@ export function CheckoutForm() {
                   className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all ${
                     selectedProvider?.provider_short_name ===
                     p.provider_short_name
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "border-border hover:border-muted-foreground/50 hover:bg-muted/50"
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                      : "border-border bg-secondary hover:border-primary/40"
                   }`}
                 >
                   {p.provider_logo ? (
@@ -374,11 +367,15 @@ export function CheckoutForm() {
             <>
               <Separator />
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total à payer</span>
-                <span className="font-bold">{formatPrice(total, "XOF")}</span>
+                <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Total
+                </span>
+                <span className="font-bold text-primary">
+                  {formatPrice(total, "XOF")}
+                </span>
               </div>
               <Button
-                className="w-full"
+                className="w-full rounded-full noise-matcha"
                 onClick={handleAttempt}
                 disabled={loading}
               >
@@ -389,7 +386,7 @@ export function CheckoutForm() {
                   </>
                 ) : (
                   <>
-                    Payer avec {selectedProvider.provider_name}
+                    Payer avec {selectedProvider.provider_name}{" "}
                     <ChevronRight className="h-4 w-4" />
                   </>
                 )}
@@ -400,32 +397,32 @@ export function CheckoutForm() {
           <button
             type="button"
             onClick={() => setStep("info")}
-            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="w-full text-[11px] uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Retour
           </button>
         </div>
       )}
 
-      {/* ─── Step 3: QR Code / USSD waiting ─── */}
+      {/* ─── Step 3 ─── */}
       {step === "payment" && (
         <div className="flex flex-col items-center gap-4 py-6 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
             <Smartphone className="h-6 w-6 text-primary" />
           </div>
 
           {cashoutUrl ? (
             <>
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-sm font-semibold text-foreground">
                   Scannez pour payer
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground max-w-xs">
                   Ouvrez{" "}
-                  <span className="font-medium text-foreground">
+                  <span className="text-foreground font-medium">
                     {selectedProvider?.provider_name}
                   </span>{" "}
-                  sur votre téléphone et scannez ce QR code.
+                  et scannez ce QR code.
                 </p>
               </div>
               <div className="rounded-lg border border-border p-3 bg-white">
@@ -445,29 +442,26 @@ export function CheckoutForm() {
             </>
           ) : (
             <div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-semibold text-foreground">
                 Confirmez sur votre téléphone
               </p>
               <p className="mt-1 text-xs text-muted-foreground max-w-xs">
-                Un appel USSD a été initié. Ouvrez votre application{" "}
-                {selectedProvider?.provider_name ?? "Mobile Money"} et validez
-                le paiement de{" "}
-                <span className="font-semibold text-foreground">
+                Validez le paiement de{" "}
+                <span className="font-bold text-primary">
                   {formatPrice(total, "XOF")}
-                </span>
-                .
+                </span>{" "}
+                via {selectedProvider?.provider_name ?? "Mobile Money"}.
               </p>
             </div>
           )}
 
-          <p className="text-[11px] text-muted-foreground">
-            Référence : <span className="font-mono">{reference}</span>
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Réf · <span className="font-mono normal-case">{reference}</span>
           </p>
 
-          {/* Polling indicator — remplace le bouton */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Spinner className="h-3 w-3" />
-            En attente de confirmation...
+            <Spinner className="h-3 w-3 text-primary" />
+            En attente de confirmation…
           </div>
         </div>
       )}
@@ -498,7 +492,7 @@ function StepDot({
         {done ? <Check className="h-3 w-3" /> : null}
       </div>
       <span
-        className={`text-[10px] ${active || done ? "text-foreground" : "text-muted-foreground"}`}
+        className={`text-[9px] uppercase tracking-wider ${active || done ? "text-foreground" : "text-muted-foreground"}`}
       >
         {label}
       </span>
