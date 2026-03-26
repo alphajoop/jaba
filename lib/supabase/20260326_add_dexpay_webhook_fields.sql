@@ -1,0 +1,14 @@
+-- Add missing columns to orders table for DexPay webhook processing
+ALTER TABLE orders
+ADD COLUMN IF NOT EXISTS transaction_id TEXT,
+ADD COLUMN IF NOT EXISTS payment_provider TEXT,
+ADD COLUMN IF NOT EXISTS external_transaction_id TEXT,
+ADD COLUMN IF NOT EXISTS fee_amount DECIMAL(10, 2),
+ADD COLUMN IF NOT EXISTS net_amount DECIMAL(10, 2),
+ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS failed_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(10, 2),
+ADD COLUMN IF NOT EXISTS refund_reason TEXT,
+ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS failure_reason TEXT;

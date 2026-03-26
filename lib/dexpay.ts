@@ -4,7 +4,8 @@ import type {
   DexPaySession,
 } from "@/types";
 
-const BASE_URL = "https://api.dexpay.africa/api/v1";
+//const BASE_URL = "https://api.dexpay.africa/api/v1";
+const BASE_URL = "https://api-sandbox.dexpay.africa/api/v1";
 
 function getHeaders() {
   const apiKey = process.env.DEXPAY_API_KEY;
@@ -26,21 +27,21 @@ export async function createCheckoutSession(params: {
   reference: string;
   item_name: string;
   amount: number;
-  currency: string;
-  customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
+  currency: "XOF" | "XAF" | "GNF";
+  countryISO: string;
+  webhook_url: string;
+  success_url: string;
+  failure_url: string;
+  customer?: {
+    phone: string;
+    email: string;
+    name: string;
+  };
 }): Promise<DexPaySession> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const res = await fetch(`${BASE_URL}/checkout-sessions`, {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({
-      ...params,
-      success_url: `${appUrl}/checkout/success?ref=${params.reference}`,
-      failure_url: `${appUrl}/checkout/failure?ref=${params.reference}`,
-      webhook_url: `${appUrl}/api/webhook/dexpay`,
-    }),
+    body: JSON.stringify(params),
   });
 
   if (!res.ok) {
@@ -50,7 +51,7 @@ export async function createCheckoutSession(params: {
 
   const json = await res.json();
   console.log("[DexPay] checkout session raw:", JSON.stringify(json));
-  return (json?.data ?? json) as DexPaySession;
+  return json.data as DexPaySession;
 }
 
 // Get ALL providers — le filtre DexPay ne fonctionne pas, on filtre manuellement dans la route
@@ -115,8 +116,15 @@ export async function verifyWebhookSignature(
     key,
     encoder.encode(JSON.stringify(payload)),
   );
-  const hex = Array.from(new Uint8Array(signed))
+
+  // Convertir en hex correctement
+  const hashArray = Array.from(new Uint8Array(signed));
+  const hexSignature = hashArray
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  return hex === signature;
+
+  console.log("[Webhook] Expected signature:", hexSignature);
+  console.log("[Webhook] Received signature:", signature);
+
+  return hexSignature === signature;
 }

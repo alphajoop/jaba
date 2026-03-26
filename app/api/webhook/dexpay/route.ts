@@ -15,6 +15,8 @@ export async function POST(request: Request) {
 
   // Vérification signature HMAC (peut être absente en sandbox)
   const signature = request.headers.get("x-webhook-signature") ?? "";
+  console.log("[Webhook] Signature header:", signature);
+
   if (signature) {
     const isValid = await verifyWebhookSignature(body, signature);
     if (!isValid) {
@@ -24,7 +26,8 @@ export async function POST(request: Request) {
   }
 
   const payload = body as DexPayWebhookPayload;
-  const { event, reference } = payload;
+  const { event } = payload;
+  const reference = payload.reference;
 
   console.log("[DexPay] webhook event:", event, "| reference:", reference);
 
@@ -36,10 +39,27 @@ export async function POST(request: Request) {
 
   switch (event) {
     case "checkout.completed": {
-      await supabase
+      console.log(`[DexPay] Payment completed for order: ${reference}`);
+
+      // Mettre à jour la commande avec les détails du paiement
+      const { error } = await supabase
         .from("orders")
-        .update({ status: "paid", updated_at: new Date().toISOString() })
+        .update({
+          status: "paid",
+          transaction_id: payload.transaction_id,
+          payment_provider: payload.operator,
+          external_transaction_id: payload.external_transaction_id,
+          fee_amount: payload.fee_amount,
+          net_amount: payload.merchant_net,
+          completed_at: payload.completed_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("reference", reference);
+
+      if (error) {
+        console.error("[DexPay] Failed to update order:", error);
+        break;
+      }
 
       // Décrémenter le stock
       const { data: order } = await supabase
@@ -66,27 +86,64 @@ export async function POST(request: Request) {
       break;
     }
 
-    case "checkout.failed":
-      await supabase
-        .from("orders")
-        .update({ status: "failed", updated_at: new Date().toISOString() })
-        .eq("reference", reference);
-      break;
+    case "checkout.failed": {
+      console.log(
+        `[DexPay] Payment failed for order: ${reference} (${payload.failure_reason || payload.error_message})`,
+      );
 
-    case "checkout.cancelled":
       await supabase
         .from("orders")
-        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .update({
+          status: "failed",
+          transaction_id: payload.transaction_id,
+          payment_provider: payload.operator,
+          failure_reason: payload.failure_reason || payload.error_message,
+          failed_at: payload.failed_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("reference", reference);
       break;
+    }
+
+    case "checkout.cancelled": {
+      console.log(`[DexPay] Payment cancelled for order: ${reference}`);
+
+      await supabase
+        .from("orders")
+        .update({
+          status: "cancelled",
+          cancelled_at: payload.cancelled_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("reference", reference);
+      break;
+    }
+
+    case "checkout.refunded": {
+      console.log(
+        `[DexPay] Payment refunded for order: ${reference} (${payload.refund_amount})`,
+      );
+
+      await supabase
+        .from("orders")
+        .update({
+          status: "refunded",
+          refund_amount: payload.refund_amount,
+          refund_reason: payload.refund_reason,
+          refunded_at: payload.refunded_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("reference", reference);
+      break;
+    }
 
     case "checkout.initiated":
-    case "checkout.processing":
-      // Informatif seulement — pas de changement de statut nécessaire
+      console.log(`[DexPay] Payment initiated for order: ${reference}`);
+      // Informatif seulement - la commande est déjà en "processing"
       break;
 
     default:
-      console.log("[DexPay] unhandled event:", event);
+      console.log("[DexPay] Unhandled event:", event);
       break;
   }
 

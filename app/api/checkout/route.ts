@@ -21,7 +21,7 @@ const CheckoutSchema = z.object({
       }),
     )
     .min(1),
-  currency: z.string().default("XOF"),
+  currency: z.enum(["XOF", "XAF", "GNF"]).default("XOF"),
 });
 
 export async function POST(request: Request) {
@@ -92,14 +92,22 @@ export async function POST(request: Request) {
   // Note: DexPay utilise notre `reference` comme identifiant de session —
   // pas besoin de stocker un ID séparé en DB.
   try {
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ?? "https://jaba-eight.vercel.app";
     const session = await createCheckoutSession({
       reference,
       item_name: `Commande ${reference}`,
       amount: total,
       currency,
-      customer_name: customer.name,
-      customer_email: customer.email,
-      customer_phone: customer.phone,
+      countryISO: country_iso,
+      webhook_url: `${appUrl}/api/webhook/dexpay`,
+      success_url: `${appUrl}/checkout/success?ref=${reference}`,
+      failure_url: `${appUrl}/checkout/failure?ref=${reference}`,
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+      },
     });
 
     // Passer le statut à "processing" — reference est déjà l'identifiant DexPay
